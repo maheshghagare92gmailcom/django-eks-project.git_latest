@@ -1,3 +1,6 @@
+# ========================
+# Django Service
+# ========================
 apiVersion: v1
 kind: Service
 metadata:
@@ -5,15 +8,20 @@ metadata:
   labels:
     app: django
 spec:
-  ports:
-    - port: 8000
+  type: LoadBalancer
   selector:
     app: django
     tier: app
-  type: LoadBalancer
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
 
 ---
 
+# ========================
+# PersistentVolumeClaim
+# ========================
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -22,13 +30,17 @@ metadata:
     app: django
 spec:
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteMany
+  storageClassName: efs-sc
   resources:
     requests:
-      storage: 10Gi
+      storage: 5Gi
 
 ---
 
+# ========================
+# Django Deployment
+# ========================
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -36,6 +48,7 @@ metadata:
   labels:
     app: django
 spec:
+  replicas: 1
   selector:
     matchLabels:
       app: django
@@ -48,30 +61,31 @@ spec:
         app: django
         tier: app
     spec:
+      # This allows Kubernetes to pull from private ECR
+      imagePullSecrets:
+        - name: ecr-secret
       volumes:
         - name: django-app-data
           persistentVolumeClaim:
             claimName: django-app-pvc
       containers:
-
-        - image: django-app:latest
-          imagePullPolicy: Never
-          name: app
+        # --------------------
+        # Django App Container
+        # --------------------
+        - name: app
+          image: 029179923871.dkr.ecr.eu-west-2.amazonaws.com/django-k8s-app-eks:latest
           ports:
             - containerPort: 8080
-              name: app
           volumeMounts:
             - name: django-app-data
               mountPath: /vol/web
           env:
             - name: DB_HOST
-              value: django-postgres
+              value: django-k8s-db.c1qgwuaeem2d.eu-west-2.rds.amazonaws.com
             - name: DB_NAME
-              value: djangodb
+              value: djangoproject
             - name: DB_USER
               value: djangouser
-            - name: ALLOWED_HOSTS
-              value: '127.0.0.1,localhost'
             - name: DB_PASS
               valueFrom:
                 secretKeyRef:
@@ -82,13 +96,15 @@ spec:
                 secretKeyRef:
                   name: django
                   key: secret
-
-        - image: django-proxy:latest
-          imagePullPolicy: Never
-          name: proxy
+            - name: ALLOWED_HOSTS
+              value: '*'
+        # --------------------
+        # Proxy Container
+        # --------------------
+        - name: proxy
+          image: 029179923871.dkr.ecr.eu-west-2.amazonaws.com/django-k8s-proxy-eks:latest
           ports:
             - containerPort: 8000
-              name: proxy
           volumeMounts:
             - name: django-app-data
               mountPath: /vol/web
