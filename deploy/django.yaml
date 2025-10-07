@@ -86,6 +86,8 @@ spec:
               value: djangoproject
             - name: DB_USER
               value: djangouser
+            - name: ALLOWED_HOSTS
+              value: 'ade11acd6684e4cc68a26cc810ec2f09-941481338.eu-west-2.elb.amazonaws.com'
             - name: DB_PASS
               valueFrom:
                 secretKeyRef:
